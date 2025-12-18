@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>College Information Chatbot</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .chat-container {
+            height: 70vh;
+            overflow-y: auto;
+        }
+        .user-message {
+            background-color: #e3f2fd;
+            border-radius: 1rem 1rem 0 1rem;
+        }
+        .bot-message {
+            background-color: #f5f5f5;
+            border-radius: 1rem 1rem 1rem 0;
+        }
+        .typing-indicator {
+            display: none;
+        }
+        .typing-indicator.typing {
+            display: flex;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-blue-600">College Information Assistant</h1>
+            <p class="text-gray-600">Ask me anything about college admissions, courses, fees, and more!</p>
+        </header>
+
+        <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+            <!-- Upload Section -->
+            <div id="upload-section" class="p-6 border-b">
+                <h2 class="text-lg font-semibold mb-4">Upload College Documents (PDF)</h2>
+                <div class="flex flex-col space-y-4">
+                    <input type="file" id="file-input" class="hidden" multiple accept=".pdf" />
+                    <button onclick="document.getElementById('file-input').click()" 
+                            class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md transition">
+                        Select PDF Files
+                    </button>
+                    <div id="file-list" class="text-sm text-gray-600">No files selected</div>
+                    <button id="upload-btn" 
+                            class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md transition disabled:opacity-50"
+                            disabled>
+                        Process Documents
+                    </button>
+                </div>
+            </div>
+
+            <!-- Chat Interface -->
+            <div class="flex flex-col h-96">
+                <!-- Chat Messages -->
+                <div id="chat-messages" class="chat-container p-4 space-y-4 flex-1 overflow-y-auto">
+                    <div class="text-center text-gray-500 py-8">
+                        <p>Upload college documents to get started. You can ask about admissions, courses, fees, and more!</p>
+                    </div>
+                </div>
+
+                <!-- Typing Indicator -->
+                <div id="typing-indicator" class="typing-indicator p-4 border-t bg-gray-50 hidden">
+                    <div class="flex items-center space-x-2">
+                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
+                    </div>
+                </div>
+
+                <!-- Input Area -->
+                <div class="p-4 border-t bg-gray-50">
+                    <div class="flex space-x-2">
+                        <input type="text" id="user-input" 
+                               class="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               placeholder="Ask me anything about the college..." disabled>
+                        <button id="send-btn" 
+                                class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition disabled:opacity-50"
+                                disabled>
+                            Send
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const fileInput = document.getElementById('file-input');
+        const fileList = document.getElementById('file-list');
+        const uploadBtn = document.getElementById('upload-btn');
+        const chatMessages = document.getElementById('chat-messages');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const typingIndicator = document.getElementById('typing-indicator');
+        
+        let selectedFiles = [];
+        let isProcessing = false;
+
+        // Event Listeners
+        fileInput.addEventListener('change', handleFileSelect);
+        uploadBtn.addEventListener('click', handleUpload);
+        sendBtn.addEventListener('click', sendMessage);
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // Functions
+        function handleFileSelect(e) {
+            selectedFiles = Array.from(e.target.files);
+            
+            if (selectedFiles.length > 0) {
+                const fileNames = selectedFiles.map(file => file.name).join(', ');
+                fileList.textContent = `${selectedFiles.length} file(s) selected: ${fileNames}`;
+                uploadBtn.disabled = false;
+            } else {
+                fileList.textContent = 'No files selected';
+                uploadBtn.disabled = true;
+            }
+        }
+
+        async function handleUpload() {
+            if (selectedFiles.length === 0 || isProcessing) return;
+            
+            isProcessing = true;
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'Processing...';
+            
+            const formData = new FormData();
+            selectedFiles.forEach(file => {
+                formData.append('files', file);
+            });
+            
+            try {
+                const response = await fetch('http://localhost:8000/upload/', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to upload files');
+                }
+                
+                const data = await response.json();
+                addBotMessage(`Successfully processed ${data.num_docs} document(s). You can now ask questions about the college.`);
+                
+                // Enable chat input
+                userInput.disabled = false;
+                sendBtn.disabled = false;
+                
+            } catch (error) {
+                console.error('Upload error:', error);
+                addBotMessage(`Error: ${error.message}`, true);
+            } finally {
+                isProcessing = false;
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = 'Process Documents';
+            }
+        }
+
+        async function sendMessage() {
+            const message = userInput.value.trim();
+            if (!message || isProcessing) return;
+            
+            // Add user message to chat
+            addUserMessage(message);
+            userInput.value = '';
+            
+            // Show typing indicator
+            showTypingIndicator(true);
+            
+            try {
+                const response = await fetch('http://localhost:8000/query/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ question: message })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to get response');
+                }
+                
+                const data = await response.json();
+                addBotMessage(data.answer);
+                
+                // Show sources if available
+                if (data.sources && data.sources.length > 0) {
+                    const sources = [...new Set(data.sources)]; // Remove duplicates
+                    const sourcesText = sources.map(src => {
+                        const fileName = src.split('/').pop();
+                        return `• ${fileName}`;
+                    }).join('\n');
+                    
+                    addBotMessage(`Sources:\n${sourcesText}`);
+                }
+                
+            } catch (error) {
+                console.error('Query error:', error);
+                addBotMessage(`I'm sorry, I encountered an error while processing your request. Please try again later.`, true);
+            } finally {
+                showTypingIndicator(false);
+            }
+        }
+
+        function addUserMessage(message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'flex justify-end';
+            messageDiv.innerHTML = `
+                <div class="max-w-3/4 user-message p-3">
+                    <p class="text-gray-800">${message}</p>
+                </div>
+            `;
+            chatMessages.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        function addBotMessage(message, isError = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'flex';
+            const messageClass = isError ? 'text-red-600' : 'text-gray-800';
+            
+            // Replace newlines with <br> for proper line breaks
+            const formattedMessage = message.replace(/\n/g, '<br>');
+            
+            messageDiv.innerHTML = `
+                <div class="max-w-3/4 bot-message p-3">
+                    <p class="${messageClass}">${formattedMessage}</p>
+                </div>
+            `;
+            chatMessages.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        function showTypingIndicator(show) {
+            if (show) {
+                typingIndicator.classList.remove('hidden');
+            } else {
+                typingIndicator.classList.add('hidden');
+            }
+            scrollToBottom();
+        }
+
+        function scrollToBottom() {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+    </script>
+</body>
+</html>
